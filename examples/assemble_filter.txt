@@ -1,0 +1,28 @@
+# 字幕逐帧 PNG 序列烧录模板（ffmpeg filter_complex）
+#
+# 输入约定：
+#   [0:v] 主视频（720x1280, yuv420p）
+#   [1:v] 字幕帧序列（-framerate 30 -i reveal_frames/vsub1/f%03d.png）
+#   [2:v] 字幕帧序列（vsub2 …）
+#   [3:a] 旁白混音
+#
+# 要点：
+# - 字幕 PNG 序列用 setpts 做时间戳偏移（不用 enable，链式 overlay 下 enable 不可靠）
+# - eof_action=pass 让序列播完后自动消失
+# - 主视频先 format=yuv420p，叠加层为 yuva420p（透明通道）
+
+# 示例：两段字幕分别在 0.4s 和 5.0s 出现
+# ffmpeg -y \
+#   -i main.mp4 \
+#   -framerate 30 -i reveal_frames/vsub1/f%03d.png \
+#   -framerate 30 -i reveal_frames/vsub2/f%03d.png \
+#   -i narration_mix.wav \
+#   -filter_complex "\
+# [1:v]setpts=PTS-STARTPTS+0.4/TB,format=yuva420p[s1];\
+# [2:v]setpts=PTS-STARTPTS+5.0/TB,format=yuva420p[s2];\
+# [0:v]format=yuv420p[base];\
+# [base][s1]overlay=x=0:y=0:eof_action=pass[v1];\
+# [v1][s2]overlay=x=0:y=0:eof_action=pass,format=yuv420p[vout]" \
+#   -map "[vout]" -map 3:a \
+#   -c:v libx264 -preset fast -crf 20 -c:a aac -b:a 128k \
+#   -shortest -movflags +faststart out.mp4
